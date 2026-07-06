@@ -1,0 +1,23 @@
+# リリース公開時に monthlet.ai（Cloudflare Pages）を再ビルドし、
+# /releases のリリースノートを自動更新する（monthlet-web #10）。
+# 前提: repo secret PAGES_DEPLOY_HOOK_URL
+#   （CF Pages の Deploy Hook URL。monthlet-web #1 の基盤セットアップ後に設定する。
+#     未設定の間は何もせず成功終了する）
+name: rebuild-monthlet-ai
+on:
+  release:
+    types: [published, edited, deleted]
+jobs:
+  trigger:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trigger Cloudflare Pages deploy hook
+        env:
+          HOOK: ${{ secrets.PAGES_DEPLOY_HOOK_URL }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "PAGES_DEPLOY_HOOK_URL 未設定のためスキップ（monthlet-web #1 の後で設定）"
+            exit 0
+          fi
+          curl -fsS -X POST "$HOOK"
+          echo "deploy hook triggered"
