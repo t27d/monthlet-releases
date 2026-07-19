@@ -1,0 +1,26 @@
+# リリース公開時に Discord #announcements へ通知する（monthlet-web #26）。
+# 前提: repo secret DISCORD_WEBHOOK_URL
+#   （Discord サーバー開設時に #announcements の webhook を発行して設定する。
+#     discord-plan.md §3-8。未設定の間は何もせず成功終了する）
+name: discord-release-notify
+on:
+  release:
+    types: [published]
+jobs:
+  notify:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Post release to Discord
+        env:
+          HOOK: ${{ secrets.DISCORD_WEBHOOK_URL }}
+          TAG: ${{ github.event.release.tag_name }}
+          URL: ${{ github.event.release.html_url }}
+        run: |
+          if [ -z "$HOOK" ]; then
+            echo "DISCORD_WEBHOOK_URL 未設定のためスキップ（Discord サーバー開設後に設定）"
+            exit 0
+          fi
+          payload=$(jq -n --arg t "$TAG" --arg u "$URL" \
+            '{content: ("📦 monthlet **" + $t + "** released\n" + $u)}')
+          curl -fsS -H 'Content-Type: application/json' -d "$payload" "$HOOK"
+          echo "discord notified"
