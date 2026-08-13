@@ -11,6 +11,29 @@ jobs:
   trigger:
     runs-on: ubuntu-latest
     steps:
+      # publish の直後は、この workflow（発火は publish の 2 秒後）が叩く時点で
+      # GitHub の一覧 API にまだ新しいリリースが載っていない。そのまま再ビルドすると
+      # LP が 1 つ前までの一覧を焼いてしまう（0.12.2 で実際に起きた・monthlet-web #173 ①）。
+      # 一覧に出るまで待ってからフックを叩く。deleted / edited は待つ意味が無いので対象外。
+      - name: Wait until the release shows up in the list API
+        if: github.event.action == 'published'
+        env:
+          TAG: ${{ github.event.release.tag_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # LP のビルドが叩くのと同じ per_page=50 の一覧を、キャッシュを避けて（monthlet-web #173 ②）
+          # 10 秒間隔で最大 2 分見る。
+          for i in $(seq 1 12); do
+            sleep 10
+            if curl -fsS -H 'Accept: application/vnd.github+json' \
+                 "https://api.github.com/repos/$REPO/releases?per_page=50&_=$(date +%s)" \
+               | jq -e --arg t "$TAG" 'any(.[]; .tag_name == $t)' > /dev/null; then
+              echo "$TAG が一覧 API に出た（$((i * 10)) 秒後）"
+              exit 0
+            fi
+            echo "$TAG はまだ一覧 API に出ていない（$((i * 10)) 秒経過）"
+          done
+          echo "::warning::2 分待っても $TAG が一覧 API に出なかった。古い一覧のままビルドされる可能性がある（monthlet.ai/releases を確認すること）"
       - name: Trigger Cloudflare Pages deploy hook
         env:
           HOOK: ${{ secrets.PAGES_DEPLOY_HOOK_URL }}
