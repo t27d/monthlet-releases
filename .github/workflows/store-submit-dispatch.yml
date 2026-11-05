@@ -8,7 +8,8 @@
 # 前提: repo secret MONTHLET_APP_DISPATCH_TOKEN
 #   fine-grained PAT・Resource owner t27d・Repository access は t27d/monthlet-app だけ・
 #   Permissions は Actions: Read and write だけ（Metadata: Read は自動で付く）。
-#   🔴 期限は作った日から 1 年。切れるとここが失敗する（下の「鍵が無い・切れた」）。作り直したら下の CREATED を直す。
+#   🔴 今の鍵: 名前「monthlet-app store-submit」・2026-11-05 作成（secret は 18:10:41Z に設定）・**期限 2027-11-07**。
+#      切れるとここが失敗する（下の「鍵が無い・切れた」）。作り直したら、この行と下の CREATED・EXPIRES を直す。
 #
 # 🛑 鍵が無い・切れたときは**失敗で終える**（Discord の通知と違い、黙ってスキップしない）。Store に出ないことに
 #    誰も気づかないのを防ぐため。そのときは monthlet-app の Actions から store-submit を手で回す（tag と mode=commit）。
@@ -28,7 +29,8 @@ jobs:
     env:
       TAG: ${{ github.event.release.tag_name }}
       GH_TOKEN: ${{ secrets.MONTHLET_APP_DISPATCH_TOKEN }}
-      CREATED: '2026-11-06'
+      CREATED: '2026-11-05'
+      EXPIRES: '2027-11-07'
     steps:
       - name: Dispatch store-submit in monthlet-app
         run: |
@@ -42,7 +44,7 @@ jobs:
             echo "::error::MONTHLET_APP_DISPATCH_TOKEN が未設定。Store に出ていない。monthlet-app の Actions から store-submit を手で回す（tag=$TAG・mode=commit）"
             exit 1
           fi
-          echo "token created: $CREATED（1 年で切れる）"
+          echo "token created: $CREATED / expires: $EXPIRES"
           gh workflow run store-submit.yml -R t27d/monthlet-app --ref main -f tag="$TAG" -f mode=commit
           echo "dispatched store-submit for $TAG"
           sleep 10
