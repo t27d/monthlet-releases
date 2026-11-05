@@ -1,0 +1,50 @@
+# リリースを公開したら、Microsoft Store への提出（t27d/monthlet-app の store-submit.yml）を起こす（monthlet-app#2188）。
+# 人間の決定（2026-11-06）「1.2.1から（文もAPIで入れる）」＝ Store の関門は Mac と同じ「このリポでリリースを公開する」1 回。
+#
+# monthlet-app の `on: release` は、リリースがこのリポにあるので発火しない。そこでここから workflow_dispatch を叩く。
+# store-submit 側でも「タグがこのリポの latest（公開済み・draft でも prerelease でもない）と一致する」ことを確かめる
+# ので、ここが誤って動いても、公開していない版は Store に出ない。
+#
+# 前提: repo secret MONTHLET_APP_DISPATCH_TOKEN
+#   fine-grained PAT・Resource owner t27d・Repository access は t27d/monthlet-app だけ・
+#   Permissions は Actions: Read and write だけ（Metadata: Read は自動で付く）。
+#   🔴 期限は作った日から 1 年。切れるとここが失敗する（下の「鍵が無い・切れた」）。作り直したら下の CREATED を直す。
+#
+# 🛑 鍵が無い・切れたときは**失敗で終える**（Discord の通知と違い、黙ってスキップしない）。Store に出ないことに
+#    誰も気づかないのを防ぐため。そのときは monthlet-app の Actions から store-submit を手で回す（tag と mode=commit）。
+name: store-submit-dispatch
+on:
+  release:
+    types: [published]
+
+permissions: {}
+
+jobs:
+  dispatch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # prerelease は出さない（監視・検証目的の publish を Store に流さない）
+    if: ${{ !github.event.release.prerelease }}
+    env:
+      TAG: ${{ github.event.release.tag_name }}
+      GH_TOKEN: ${{ secrets.MONTHLET_APP_DISPATCH_TOKEN }}
+      CREATED: '2026-11-06'
+    steps:
+      - name: Dispatch store-submit in monthlet-app
+        run: |
+          set -euo pipefail
+          # 出荷タグ（vX.Y.Z）以外は出さない（discord-notify.yml と同じ門番）
+          if ! printf '%s' "$TAG" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "出荷タグの形ではないためスキップ: $TAG"
+            exit 0
+          fi
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::MONTHLET_APP_DISPATCH_TOKEN が未設定。Store に出ていない。monthlet-app の Actions から store-submit を手で回す（tag=$TAG・mode=commit）"
+            exit 1
+          fi
+          echo "token created: $CREATED（1 年で切れる）"
+          gh workflow run store-submit.yml -R t27d/monthlet-app --ref main -f tag="$TAG" -f mode=commit
+          echo "dispatched store-submit for $TAG"
+          sleep 10
+          gh api "repos/t27d/monthlet-app/actions/workflows/store-submit.yml/runs?per_page=1" \
+            --jq '.workflow_runs[0] | "run: \(.html_url) (\(.status))"'
